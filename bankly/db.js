@@ -1,5 +1,5 @@
 /** Database setup for jobly. */
-
+console.log(process.version)
 const { Client } = require('pg');
 const { DB_URI } = require('./config');
 

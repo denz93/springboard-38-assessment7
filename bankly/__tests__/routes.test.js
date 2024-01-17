@@ -90,6 +90,7 @@ describe("POST /auth/login", function() {
     expect(username).toBe("u1");
     expect(admin).toBe(false);
   });
+
 });
 
 describe("GET /users", function() {
@@ -98,12 +99,26 @@ describe("GET /users", function() {
     expect(response.statusCode).toBe(401);
   });
 
+  //TEST BUG #4
+  test("should deny access if malware token provided", async function() {
+    const response = await request(app)
+      .get("/users")
+      .send({ _token: jwt.sign({username: 'u1', admin: true}, 'malware') });
+    expect(response.statusCode).toBe(401);
+  })
+
   test("should list all users", async function() {
     const response = await request(app)
       .get("/users")
       .send({ _token: tokens.u1 });
     expect(response.statusCode).toBe(200);
     expect(response.body.users.length).toBe(3);
+    //TEST BUG #3
+    expect(response.body.users).toEqual(expect.arrayContaining([
+      { username: 'u1', first_name: 'fn1', last_name: 'ln1' },
+      { username: 'u2', first_name: 'fn2', last_name: 'ln2' },
+      { username: 'u3', first_name: 'fn3', last_name: 'ln3' }
+    ]))
   });
 });
 
@@ -126,9 +141,32 @@ describe("GET /users/[username]", function() {
       phone: "phone1"
     });
   });
+
+  //TEST BUG #5
+  test("should return 404 if user is not found", async function() {
+    const response = await request(app)
+      .get("/users/does-not-exist")
+      .send({ _token: tokens.u1 });
+    expect(response.statusCode).toBe(404);
+  })
 });
 
 describe("PATCH /users/[username]", function() {
+  //TEST BUG #1
+  test("should allow update partial of u1", async () => {
+    const response = await request(app)
+      .patch("/users/u1")
+      .send({ _token: tokens.u1, first_name: "new-fn1" });
+    expect(response.statusCode).toBe(200);
+    expect(response.body.user).toEqual(expect.objectContaining({
+      username: "u1",
+      first_name: "new-fn1",
+      last_name: "ln1",
+      email: "email1",
+      phone: "phone1",
+      admin: false
+    }));
+  })
   test("should deny access if no token provided", async function() {
     const response = await request(app).patch("/users/u1");
     expect(response.statusCode).toBe(401);
@@ -192,6 +230,14 @@ describe("DELETE /users/[username]", function() {
     expect(response.statusCode).toBe(200);
     expect(response.body).toEqual({ message: "deleted" });
   });
+
+  //TEST BUG #6
+  test("should return 404 if cannot find", async function() {
+    const response = await request(app)
+      .delete("/users/not-a-user")
+      .send({ _token: tokens.u3 }); // u3 is admin
+    expect(response.statusCode).toBe(404);
+  })
 });
 
 afterEach(async function() {

@@ -18,7 +18,8 @@ const { authUser, requireLogin, requireAdmin } = require('../middleware/auth');
 router.get('/', authUser, requireLogin, async function(req, res, next) {
   try {
     let users = await User.getAll();
-    return res.json({ users });
+    //FIX BUG #3
+    return res.json({ users: users.map(u => ({username: u.username, first_name: u.first_name, last_name: u.last_name})) });
   } catch (err) {
     return next(err);
   }
@@ -63,7 +64,8 @@ router.get('/:username', authUser, requireLogin, async function(
  *
  */
 
-router.patch('/:username', authUser, requireLogin, requireAdmin, async function(
+// FIX BUG #1
+router.patch('/:username', authUser, requireLogin, async function(
   req,
   res,
   next
@@ -74,12 +76,21 @@ router.patch('/:username', authUser, requireLogin, requireAdmin, async function(
     }
 
     // get fields to change; remove token so we don't try to change it
-    let fields = { ...req.body };
-    delete fields._token;
+    // FIX BUG #2
+    const fieldKeys = ['first_name', 'last_name', 'phone', 'email'];
+    let fields = Object.keys(req.body).reduce((obj, key) => {
+      if (fieldKeys.includes(key)) {
+        obj[key] = req.body[key];
+      }
+      return obj
+    }, {})
+    if (Object.keys(fields).length === 0) {
+      throw new ExpressError('No fields to update', 401);
+    }
 
     let user = await User.update(req.params.username, fields);
     return res.json({ user });
-  } catch (err) {
+  } catch (err) { 
     return next(err);
   }
 }); // end
@@ -100,7 +111,8 @@ router.delete('/:username', authUser, requireAdmin, async function(
   next
 ) {
   try {
-    User.delete(req.params.username);
+    // FIX BUG #6
+    await User.delete(req.params.username);
     return res.json({ message: 'deleted' });
   } catch (err) {
     return next(err);
